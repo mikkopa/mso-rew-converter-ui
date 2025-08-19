@@ -1,0 +1,513 @@
+@* Example Blazor component for MSO conversion *@
+
+@inject IJSRuntime JSRuntime
+
+<div class="mso-converter">
+    <h3>MSO to REW Converter</h3>
+
+    <p>Convert your MSO filter settings to REW format easily. Use RBJ Q values for StormAudio compatibility.</p>
+    <div>
+        In MSO:
+        <ol>
+            <li>Select "Show Filter Report (Abbreviated)" to get the filters.</li>
+            <li>Copy the report content.</li>
+        </ol>
+        In here:
+        <ol>
+            <li>Paste the MSO filter content into the text area below or use the file selector to load a text file containing the MSO filter report data.</li>
+            <li>Adjust the conversion options as needed.</li>
+            <li>Click the Convert button.</li>
+        </ol>
+    </div>
+
+    <p>When using the values in a processor, remember to check and set the delays from the MSO Filter Report.</p>
+
+    <div class="row">
+        <div class="col-md-8">
+            <div class="card">
+                <div class="card-header">
+                    <h5>MSO Filter Content</h5>
+                </div>
+                <div class="card-body">
+                    <div class="file-input-container mb-3">
+                        <label for="fileInput" class="form-label">Load from file:</label>
+                        <div class="input-group">
+                            <input type="file" 
+                                   @ref="fileInputRef"
+                                   @onchange="OnFileSelected" 
+                                   id="fileInput" 
+                                   class="form-control" 
+                                   accept=".txt" />
+                            <button type="button" 
+                                    class="btn btn-outline-secondary" 
+                                    @onclick="ClearFile">
+                                Clear
+                            </button>
+                        </div>
+                        <div class="form-text">Select a .txt file containing MSO filter data</div>
+                    </div>
+
+                    <textarea @bind="msoContent" 
+                              @bind:event="oninput"
+                              @onchange="ValidateContent"
+                              class="form-control" 
+                              rows="15" 
+                              placeholder="Paste your MSO filter content here..."></textarea>
+                    
+                    @if (!string.IsNullOrEmpty(validationMessage))
+                    {
+                        <div class="alert alert-warning mt-2">
+                            @validationMessage
+                        </div>
+                    }
+                </div>
+            </div>
+        </div>
+
+        <div class="col-md-4">
+            <div class="card">
+                <div class="card-header">
+                    <h5>Conversion Options</h5>
+                </div>
+                <div class="card-body">
+                    <div class="mb-3">
+                        <label class="form-label">Equalizer Name</label>
+                        <input @bind="options.EqualiserName" class="form-control" />
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label">Q Value Type</label>
+                        <select @bind="options.QType" class="form-select">
+                            <option value="@QValueType.RBJ">RBJ (Recommended)</option>
+                            <option value="@QValueType.Classic">Classic</option>
+                        </select>
+                    </div>
+
+                    <div class="mb-3">
+                        <div class="form-check">
+                            <input @bind="options.CombineShared" class="form-check-input" type="checkbox" />
+                            <label class="form-check-label">
+                                Combine Shared Filters
+                            </label>
+                        </div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label">Include Filter Types</label>
+                        <div class="form-check">
+                            <input @bind="options.IncludeParametricEQ" class="form-check-input" type="checkbox" />
+                            <label class="form-check-label">Parametric EQ</label>
+                        </div>
+                        <div class="form-check">
+                            <input @bind="options.IncludeAllPass" class="form-check-input" type="checkbox" />
+                            <label class="form-check-label">All-Pass Filters</label>
+                        </div>
+                    </div>
+
+                    <button @onclick="ConvertMso" 
+                            class="btn btn-primary w-100" 
+                            disabled="@(isConverting || string.IsNullOrWhiteSpace(msoContent))">
+                        @if (isConverting)
+                        {
+                            <span class="spinner-border spinner-border-sm me-2"></span>
+                        }
+                        Convert
+                    </button>
+
+                    @if (preview != null)
+                    {
+                        <div class="alert alert-info mt-3">
+                            <strong>Preview:</strong><br />
+                            <span>Channels: @preview.ChannelCount</span><br />
+                            <span>Total Filters: @preview.TotalFilters</span><br />
+                            <span title="If 'Yes' then a shared filter will be saved to a different file">Shared Filters: @(preview.HasSharedFilters ? "Yes" : "No")</span><br />
+                            <span>Gain Settings: @preview.GainSettingsCount channels</span><br />
+                            <span>Delay Settings: @preview.DelaySettingsCount channels</span><br />
+                            <span>Inversions: @(preview.HasInversions ? "Yes" : "No")</span>
+                        </div>
+                    }
+                </div>
+            </div>
+        </div>
+    </div>
+
+    @if (conversionResult != null)
+    {
+        <div class="card mt-4">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h5>Conversion Results</h5>
+                <button @onclick="DownloadAllFiles" class="btn btn-success btn-sm">
+                    Download All Files
+                </button>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-6">
+                        <h6>Generated Files</h6>
+                        <div class="list-group">
+                            @foreach (var file in conversionResult.GetDownloadFiles())
+                            {
+                                <div class="list-group-item d-flex justify-content-between align-items-center">
+                                    <span>@file.FileName</span>
+                                    <button @onclick="() => DownloadFile(file)" class="btn btn-outline-primary btn-sm">
+                                        Download
+                                    </button>
+                                </div>
+                            }
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <h6>Processing Log</h6>
+                        <pre class="bg-light p-3" style="max-height: 300px; overflow-y: auto;">@conversionResult.GetFormattedLog()</pre>
+                    </div>
+                </div>
+                
+                @* Gain and Delay Settings Section *@
+                @if (conversionResult.GainSettings.Any() || conversionResult.DelaySettings.Any() || conversionResult.Inversions.HasInversions)
+                {
+                    <div class="row mt-4 channel-settings">
+                        <div class="col-12">
+                            <h6>Channel Settings</h6>
+                            <div class="row">
+                                @if (conversionResult.GainSettings.Any())
+                                {
+                                    <div class="col-md-4">
+                                        <div class="card">
+                                            <div class="card-header">
+                                                <h6 class="mb-0">Gain Settings</h6>
+                                            </div>
+                                            <div class="card-body">
+                                                @foreach (var gainSetting in conversionResult.GainSettings)
+                                                {
+                                                    <div class="d-flex justify-content-between">
+                                                        <span>@gainSetting.ChannelName:</span>
+                                                        <span>@gainSetting.GainValue.ToString("F2") dB</span>
+                                                    </div>
+                                                }
+                                            </div>
+                                        </div>
+                                    </div>
+                                }
+                                
+                                @if (conversionResult.DelaySettings.Any())
+                                {
+                                    <div class="col-md-4">
+                                        <div class="card">
+                                            <div class="card-header">
+                                                <h6 class="mb-0">Delay Settings</h6>
+                                            </div>
+                                            <div class="card-body">
+                                                @foreach (var delaySetting in conversionResult.DelaySettings)
+                                                {
+                                                    <div class="d-flex justify-content-between">
+                                                        <span>@delaySetting.ChannelName:</span>
+                                                        <span>@delaySetting.DelayValue.ToString("F2") ms</span>
+                                                    </div>
+                                                }
+                                            </div>
+                                        </div>
+                                    </div>
+                                }
+                                
+                                @if (conversionResult.Inversions.HasInversions)
+                                {
+                                    <div class="col-md-4">
+                                        <div class="card">
+                                            <div class="card-header">
+                                                <h6 class="mb-0">Channel Inversions</h6>
+                                            </div>
+                                            <div class="card-body">
+                                                @foreach (var channel in conversionResult.Inversions.InvertedChannels)
+                                                {
+                                                    <div class="text-warning">
+                                                        <i class="bi bi-arrow-clockwise"></i>
+                                                        @channel inverted
+                                                    </div>
+                                                }
+                                            </div>
+                                        </div>
+                                    </div>
+                                }
+                                else
+                                {
+                                    <div class="col-md-4">
+                                        <div class="card">
+                                            <div class="card-header">
+                                                <h6 class="mb-0">Channel Inversions</h6>
+                                            </div>
+                                            <div class="card-body">
+                                                <span class="text-muted">No inversions</span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                }
+                            </div>
+                        </div>
+                    </div>
+                }
+            </div>
+        </div>
+    }
+</div>
+
+@code {
+    private string msoContent = string.Empty;
+    private string validationMessage = string.Empty;
+    private ConversionOptionsUI options = new();
+    private MsoConversionService conversionService = new();
+    private ConversionResult? conversionResult;
+    private ConversionPreview? preview;
+    private bool isConverting = false;
+    private ElementReference fileInputRef;
+
+    protected override void OnInitialized()
+    {
+        // Load saved options from localStorage if available
+        LoadSavedOptions();
+    }
+
+    private async Task OnFileSelected(ChangeEventArgs e)
+    {
+        var file = await JSRuntime.InvokeAsync<IJSObjectReference>("getSelectedFile", fileInputRef);
+        if (file != null)
+        {
+            await ReadFileContent(file);
+        }
+    }
+
+    private async Task ReadFileContent(IJSObjectReference file)
+    {
+        try
+        {
+            var content = await JSRuntime.InvokeAsync<string>("readFileAsText", file);
+            if (!string.IsNullOrWhiteSpace(content))
+            {
+                msoContent = content;
+                ValidateContent();
+                StateHasChanged();
+            }
+        }
+        catch (Exception ex)
+        {
+            validationMessage = $"Error reading file: {ex.Message}";
+            StateHasChanged();
+        }
+    }
+
+    private void ClearFile()
+    {
+        msoContent = string.Empty;
+        validationMessage = string.Empty;
+        preview = null;
+        conversionResult = null;
+        StateHasChanged();
+    }
+
+    private void ValidateContent()
+    {
+        if (string.IsNullOrWhiteSpace(msoContent))
+        {
+            validationMessage = string.Empty;
+            preview = null;
+            return;
+        }
+
+        var validation = conversionService.ValidateMsoContent(msoContent);
+        validationMessage = validation.IsValid ? string.Empty : validation.ErrorMessage ?? string.Empty;
+
+        if (validation.IsValid)
+        {
+            preview = conversionService.GetConversionPreview(msoContent, options);
+        }
+        else
+        {
+            preview = null;
+        }
+    }
+
+    private async Task ConvertMso()
+    {
+        if (string.IsNullOrWhiteSpace(msoContent))
+            return;
+
+        isConverting = true;
+        StateHasChanged();
+
+        try
+        {
+            await Task.Delay(100); // Small delay to show loading state
+            conversionResult = conversionService.ConvertMso(msoContent, options);
+            
+            // Save options to localStorage
+            await SaveOptions();
+        }
+        finally
+        {
+            isConverting = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task DownloadFile(FileDownloadInfo file)
+    {
+        var bytes = System.Text.Encoding.UTF8.GetBytes(file.Content);
+        var base64 = Convert.ToBase64String(bytes);
+        
+        await JSRuntime.InvokeVoidAsync("downloadFile", file.FileName, base64, file.MimeType);
+    }
+
+    private async Task DownloadAllFiles()
+    {
+        if (conversionResult == null) return;
+
+        var files = conversionResult.GetDownloadFiles();
+        foreach (var file in files)
+        {
+            await DownloadFile(file);
+            await Task.Delay(100); // Small delay between downloads
+        }
+    }
+
+    private async Task SaveOptions()
+    {
+        try
+        {
+            var json = conversionService.SerializeOptions(options);
+            await JSRuntime.InvokeVoidAsync("localStorage.setItem", "msoConverterOptions", json);
+        }
+        catch
+        {
+            // Ignore localStorage errors
+        }
+    }
+
+    private async void LoadSavedOptions()
+    {
+        try
+        {
+            var json = await JSRuntime.InvokeAsync<string>("localStorage.getItem", "msoConverterOptions");
+            if (!string.IsNullOrEmpty(json))
+            {
+                var savedOptions = conversionService.DeserializeOptions(json);
+                if (savedOptions != null)
+                {
+                    options = savedOptions;
+                    StateHasChanged();
+                }
+            }
+        }
+        catch
+        {
+            // Ignore localStorage errors
+        }
+    }
+}
+
+<script>
+    window.downloadFile = (filename, base64Content, mimeType) => {
+        const linkElement = document.createElement('a');
+        linkElement.setAttribute('href', `data:${mimeType};base64,${base64Content}`);
+        linkElement.setAttribute('download', filename);
+        linkElement.style.display = 'none';
+        document.body.appendChild(linkElement);
+        linkElement.click();
+        document.body.removeChild(linkElement);
+    };
+
+    window.getSelectedFile = (fileInput) => {
+        if (fileInput && fileInput.files && fileInput.files.length > 0) {
+            return fileInput.files[0];
+        }
+        return null;
+    };
+
+    window.readFileAsText = (file) => {
+        return new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = () => resolve(reader.result);
+            reader.onerror = () => reject(reader.error);
+            reader.readAsText(file);
+        });
+    };
+</script>
+
+<style>
+    .mso-converter {
+        max-width: 1200px;
+        margin: 0 auto;
+        padding: 20px;
+    }
+
+    .card {
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        border: 1px solid #e0e0e0;
+    }
+
+    .card-header {
+        background-color: #f8f9fa;
+        border-bottom: 1px solid #e0e0e0;
+    }
+
+    pre {
+        font-size: 0.875rem;
+        border-radius: 0.375rem;
+    }
+
+    .list-group-item {
+        border: 1px solid #e0e0e0;
+    }
+
+    .alert {
+        border-radius: 0.375rem;
+    }
+
+    .btn {
+        border-radius: 0.375rem;
+    }
+
+    .form-control, .form-select {
+        border-radius: 0.375rem;
+    }
+
+    /* File input styles */
+    .file-input-container .form-text {
+        font-size: 0.875rem;
+        color: #6c757d;
+    }
+
+    /* File input styling */
+    .input-group .form-control[type="file"] {
+        border-top-right-radius: 0;
+        border-bottom-right-radius: 0;
+    }
+
+    .input-group .btn-outline-secondary {
+        border-top-left-radius: 0;
+        border-bottom-left-radius: 0;
+        border-left: 0;
+    }
+
+    /* Channel settings styling */
+    .channel-settings .card {
+        height: 100%;
+        margin-bottom: 1rem;
+    }
+
+    .channel-settings .card-header h6 {
+        margin: 0;
+        font-weight: 600;
+    }
+
+    .channel-settings .card-body {
+        padding: 0.75rem;
+    }
+
+    .channel-settings .d-flex {
+        padding: 0.25rem 0;
+        border-bottom: 1px solid #f8f9fa;
+    }
+
+    .channel-settings .d-flex:last-child {
+        border-bottom: none;
+    }
+</style>
