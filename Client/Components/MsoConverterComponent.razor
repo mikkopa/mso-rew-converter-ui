@@ -104,6 +104,19 @@
                         </div>
                     </div>
 
+                    <div class="mb-3">
+                        <label class="form-label">Delay Display</label>
+                        <div class="input-group">
+                            <select @bind="options.DelayDisplayUnit" class="form-select">
+                                <option value="@DelayUnit.Milliseconds">Milliseconds</option>
+                                <option value="@DelayUnit.Meters">Meters</option>
+                                <option value="@DelayUnit.Feet">Feet</option>
+                            </select>
+                            <input class="form-control" type="number" step="0.01" @bind="options.DelayOffset" title="Offset in selected unit" />
+                        </div>
+                        <div class="form-text">Select unit to display delays and provide an offset to add to all delay values (applied in selected unit).</div>
+                    </div>
+
                     <button @onclick="ConvertMso" 
                             class="btn btn-primary w-100" 
                             disabled="@(isConverting || string.IsNullOrWhiteSpace(msoContent))">
@@ -143,22 +156,72 @@
             <div class="card-body">
                 <div class="row">
                     <div class="col-md-6">
-                        <h6>Generated Files</h6>
-                        <div class="list-group">
-                            @foreach (var file in conversionResult.GetDownloadFiles())
-                            {
-                                <div class="list-group-item d-flex justify-content-between align-items-center">
-                                    <span>@file.FileName</span>
-                                    <button @onclick="() => DownloadFile(file)" class="btn btn-outline-primary btn-sm">
-                                        Download
-                                    </button>
+
+                            <div class="card mt-3">
+                                <div class="card-body">
+                                    <p>Add manual filters. Click Download or Download All Files to get the manual filters applied. The manual filters are added first and then the filters that are read from MSO Filter Content.</p>
                                 </div>
-                            }
-                        </div>
+                            </div>
+
+                            <div class="card mt-3">
+                                <div class="card-header">
+                                    <h6 class="mb-0">Manual Shared Filters (will be prepended to all channel files)</h6>
+                                </div>
+                                <div class="card-body">
+                                    <textarea class="form-control" rows="4" @bind="manualSharedFilters" placeholder="Enter manual filters for shared block..."></textarea>
+                                </div>
+                            </div>
+
+                            <div class="card mt-3">
+                                <div class="card-header">
+                                    <h6 class="mb-0">Manual Channel Filters</h6>
+                                </div>
+                                <div class="card-body">
+                                    @if (preview?.ChannelNames != null && preview.ChannelNames.Any())
+                                    {
+                                        foreach (var ch in preview.ChannelNames)
+                                        {
+                                            <div class="mb-3">
+                                                <label class="form-label">@ch</label>
+                                                <textarea class="form-control" rows="3" @bind="manualChannelFilters[ch]" placeholder="Enter manual filters for @ch..."></textarea>
+                                            </div>
+                                        }
+                                    }
+                                    else
+                                    {
+                                        <div class="text-muted">No channels parsed yet</div>
+                                    }
+                                </div>
+                            </div>
                     </div>
                     <div class="col-md-6">
-                        <h6>Processing Log</h6>
-                        <pre class="bg-light p-3" style="max-height: 300px; overflow-y: auto;">@conversionResult.GetFormattedLog()</pre>
+                            <div class="card mt-3">
+                                <div class="card-header">
+                                    <h6 class="mb-0">Processing Log</h6>
+                                </div>
+                                <div class="card-body">
+                                    <pre class="bg-light p-3" style="max-height: 300px; overflow-y: auto;">@conversionResult.GetFormattedLog()</pre>
+                                </div>
+                            </div>
+
+                            <div class="card mt-3">
+                                <div class="card-header">
+                                    <h6 class="mb-0">Generated Files</h6>
+                                </div>
+                                <div class="card-body">
+                                    <div class="list-group">
+                                        @foreach (var file in conversionResult.GetDownloadFiles())
+                                        {
+                                            <div class="list-group-item d-flex justify-content-between align-items-center">
+                                                <span>@file.FileName</span>
+                                                <button @onclick="() => DownloadFile(file)" class="btn btn-outline-primary btn-sm">
+                                                    Download
+                                                </button>
+                                            </div>
+                                        }
+                                    </div>
+                                </div>
+                            </div>
                     </div>
                 </div>
                 
@@ -199,9 +262,10 @@
                                             <div class="card-body">
                                                 @foreach (var delaySetting in conversionResult.DelaySettings)
                                                 {
+                                                    double displayValue = ConvertDelayForDisplay(delaySetting.DelayValue, options.DelayDisplayUnit);
                                                     <div class="d-flex justify-content-between">
                                                         <span>@delaySetting.ChannelName:</span>
-                                                        <span>@delaySetting.DelayValue.ToString("F2") ms</span>
+                                                        <span>@displayValue.ToString("F2") @GetDelayUnitLabel(options.DelayDisplayUnit)</span>
                                                     </div>
                                                 }
                                             </div>
@@ -257,6 +321,10 @@
     private MsoConversionService conversionService = new();
     private ConversionResult? conversionResult;
     private ConversionPreview? preview;
+    // Manual filter text entered by the user per channel (key = channel name)
+    private Dictionary<string, string> manualChannelFilters = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+    // Manual shared filters to prepend to all channels
+    private string manualSharedFilters = string.Empty;
     private bool isConverting = false;
     private ElementReference fileInputRef;
 
@@ -318,6 +386,15 @@
         if (validation.IsValid)
         {
             preview = conversionService.GetConversionPreview(msoContent, options);
+            // Initialize manual filter inputs for channels found in preview if not already present
+            if (preview != null && preview.ChannelNames != null)
+            {
+                foreach (var ch in preview.ChannelNames)
+                {
+                    if (!manualChannelFilters.ContainsKey(ch))
+                        manualChannelFilters[ch] = string.Empty;
+                }
+            }
         }
         else
         {
@@ -350,10 +427,123 @@
 
     private async Task DownloadFile(FileDownloadInfo file)
     {
-        var bytes = System.Text.Encoding.UTF8.GetBytes(file.Content);
+    // Rebuild file content with manual filters merged into filter list and renumbered
+    var rebuilt = BuildFileWithManualFilters(file.FileName, file.Content);
+    var bytes = System.Text.Encoding.UTF8.GetBytes(rebuilt);
         var base64 = Convert.ToBase64String(bytes);
         
         await JSRuntime.InvokeVoidAsync("downloadFile", file.FileName, base64, file.MimeType);
+    }
+
+    // Build file content by merging manual shared and per-channel filters into the generated file's filter list
+    private string BuildFileWithManualFilters(string fileName, string originalContent)
+    {
+        try
+        {
+            var channelName = fileName.Replace("_filters.txt", "", StringComparison.OrdinalIgnoreCase);
+
+            // Split manual inputs into lines
+            var manualLines = new List<string>();
+            if (!string.IsNullOrWhiteSpace(manualSharedFilters))
+            {
+                manualLines.AddRange(SplitLines(manualSharedFilters));
+            }
+            if (manualChannelFilters.TryGetValue(channelName, out var manualChannel) && !string.IsNullOrWhiteSpace(manualChannel))
+            {
+                manualLines.AddRange(SplitLines(manualChannel));
+            }
+
+            // Split original content into lines
+            var lines = originalContent.Split(new[] { "\r\n", "\n" }, StringSplitOptions.None).ToList();
+
+            // Find first filter line index
+            var filterIndex = lines.FindIndex(l => System.Text.RegularExpressions.Regex.IsMatch(l.TrimStart(), "^Filter\\s*\\d+\\s*:", System.Text.RegularExpressions.RegexOptions.IgnoreCase));
+            List<string> headerLines;
+            List<string> existingFilterLines = new List<string>();
+
+            if (filterIndex >= 0)
+            {
+                headerLines = lines.Take(filterIndex).ToList();
+                existingFilterLines = lines.Skip(filterIndex).Where(l => !string.IsNullOrWhiteSpace(l)).ToList();
+            }
+            else
+            {
+                // No filter lines found - treat whole content as header
+                headerLines = lines;
+            }
+
+            // Extract filter bodies (everything after the first ':' in a filter line) from existing filters
+            var existingBodies = new List<string>();
+            foreach (var fl in existingFilterLines)
+            {
+                var m = System.Text.RegularExpressions.Regex.Match(fl, "^Filter\\s*\\d+\\s*:\\s*(.*)$", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+                if (m.Success)
+                {
+                    existingBodies.Add(m.Groups[1].Value.Trim());
+                }
+                else
+                {
+                    // If line doesn't match, include raw trimmed line as body
+                    existingBodies.Add(fl.Trim());
+                }
+            }
+
+            // Process manual lines into bodies: accept lines that either start with 'Filter N:' or raw filter body lines
+            var manualBodies = new List<string>();
+            foreach (var ml in manualLines)
+            {
+                var trimmed = ml.Trim();
+                if (string.IsNullOrEmpty(trimmed)) continue;
+
+                var m = System.Text.RegularExpressions.Regex.Match(trimmed, "^Filter\\s*\\d+\\s*:\\s*(.*)$", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+                if (m.Success)
+                {
+                    manualBodies.Add(m.Groups[1].Value.Trim());
+                }
+                else
+                {
+                    // If user provided a line without 'Filter N:' prefix, treat whole line as body
+                    manualBodies.Add(trimmed);
+                }
+            }
+
+            // Combine manual bodies first, then existing bodies
+            var combined = new List<string>();
+            combined.AddRange(manualBodies);
+            combined.AddRange(existingBodies);
+
+            // If there are no combined filters, return original content unchanged
+            if (!combined.Any())
+            {
+                return originalContent;
+            }
+
+            // Rebuild content: header + renumbered Filter lines
+            var sb = new System.Text.StringBuilder();
+            foreach (var h in headerLines)
+            {
+                sb.AppendLine(h);
+            }
+
+            int idx = 1;
+            foreach (var body in combined)
+            {
+                sb.AppendLine($"Filter {idx}: {body}");
+                idx++;
+            }
+
+            return sb.ToString();
+        }
+        catch
+        {
+            // On error, return original content
+            return originalContent;
+        }
+    }
+
+    private IEnumerable<string> SplitLines(string s)
+    {
+        return s.Split(new[] { "\r\n", "\n" }, StringSplitOptions.None).Select(l => l?.TrimEnd() ?? "");
     }
 
     private async Task DownloadAllFiles()
@@ -400,6 +590,47 @@
         {
             // Ignore localStorage errors
         }
+    }
+
+    // Convert stored delay in milliseconds to the value to display according to the selected unit
+    private double ConvertDelayForDisplay(double delayMs, DelayUnit unit)
+    {
+        // Assumption: delayMs is a time delay in milliseconds
+        // For distance units, convert time to distance using speed of sound ~343 m/s
+        const double speedOfSound_m_per_s = 343.0;
+
+        double result;
+        switch (unit)
+        {
+            case DelayUnit.Milliseconds:
+                result = delayMs + options.DelayOffset; // offset is in ms
+                break;
+            case DelayUnit.Meters:
+                // Convert ms to seconds, then to meters. offset is in meters
+                result = (delayMs / 1000.0) * speedOfSound_m_per_s + options.DelayOffset;
+                break;
+            case DelayUnit.Feet:
+                // Convert ms -> meters -> feet, then add offset in feet
+                var meters = (delayMs / 1000.0) * speedOfSound_m_per_s;
+                result = meters * 3.28084 + options.DelayOffset;
+                break;
+            default:
+                result = delayMs + options.DelayOffset;
+                break;
+        }
+
+        return result;
+    }
+
+    private string GetDelayUnitLabel(DelayUnit unit)
+    {
+        return unit switch
+        {
+            DelayUnit.Milliseconds => "ms",
+            DelayUnit.Meters => "m",
+            DelayUnit.Feet => "ft",
+            _ => "",
+        };
     }
 }
 

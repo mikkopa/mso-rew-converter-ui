@@ -27,7 +27,7 @@ A modern web-based user interface for converting Multi-Sub Optimizer (MSO) filte
 ## 🚀 Getting Started
 
 ### Access the Application
-Visit the web application at: [Your deployment URL here]
+Visit the web application at: https://purple-glacier-033fcb503.1.azurestaticapps.net/
 
 Or run locally:
 1. Clone this repository
@@ -53,6 +53,7 @@ Or run locally:
 
 4. **Convert & Download**:
    - Click "Convert" to process the filters
+   - Add manual filter to all channels or individual channels. These are added before filters from MSO content.
    - Download individual files or all files at once
 
 ## 📊 Supported Filter Types
@@ -200,8 +201,6 @@ Client/             # Blazor WebAssembly app
 ├── Services/       # Conversion logic
 ├── Layout/         # App layout
 └── wwwroot/        # Static assets
-
-Shared/             # Shared models
 ```
 
 ## 📄 License
@@ -229,6 +228,7 @@ Please [open an issue](https://github.com/mikkopa/mso-rew-converter-ui/issues/ne
 ## 📈 Version History
 
 - **v1.0**: Initial Blazor WebAssembly release
+- **v1.0.1**: Added option to add manual filters to result files. Added option to show delay in milliseconds, meters or feets and to add an offset to delay values.
 
 ---
 

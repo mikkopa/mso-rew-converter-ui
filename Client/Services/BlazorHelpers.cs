@@ -20,6 +20,16 @@ namespace PeqConverter.Client.Services
         public bool IncludeParametricEQ { get; set; } = true;
 
         public bool IncludeAllPass { get; set; } = true;
+        
+    /// <summary>
+    /// Unit to display delays in the UI
+    /// </summary>
+    public DelayUnit DelayDisplayUnit { get; set; } = DelayUnit.Milliseconds;
+
+    /// <summary>
+    /// Offset to add to all delay values (in the unit selected by DelayDisplayUnit)
+    /// </summary>
+    public double DelayOffset { get; set; } = 0.0;
 
         /// <summary>
         /// Convert UI options to internal conversion options
@@ -68,6 +78,16 @@ namespace PeqConverter.Client.Services
     {
         RBJ,
         Classic
+    }
+
+    /// <summary>
+    /// Units for delay display and offset in the UI
+    /// </summary>
+    public enum DelayUnit
+    {
+        Milliseconds,
+        Meters,
+        Feet
     }
 
     /// <summary>
@@ -161,6 +181,7 @@ namespace PeqConverter.Client.Services
                 preview.GainSettingsCount = result.GainSettings.Count;
                 preview.DelaySettingsCount = result.DelaySettings.Count;
                 preview.HasInversions = result.Inversions.HasInversions;
+                preview.ChannelNames = result.ChannelFiles.Keys.Select(k => k.Replace("_filters.txt", "")).ToList();
             }
             catch (Exception ex)
             {
@@ -222,6 +243,11 @@ namespace PeqConverter.Client.Services
         public int GainSettingsCount { get; set; }
         public int DelaySettingsCount { get; set; }
         public bool HasInversions { get; set; }
+        
+    /// <summary>
+    /// Names of parsed channels (in same order as conversion result keys)
+    /// </summary>
+    public List<string> ChannelNames { get; set; } = new List<string>();
     }
 
     /// <summary>
