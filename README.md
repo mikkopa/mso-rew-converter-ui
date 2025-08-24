@@ -20,9 +20,10 @@ A modern web-based user interface for converting Multi-Sub Optimizer (MSO) filte
 
 ### Channel Settings Display
 - **Gain Settings**: View final gain values for each channel
-- **Delay Settings**: Display delay/distance settings per channel  
+- **Delay Settings**: Display delay/distance settings per channel with multiple unit options
+- **Offset Support**: Apply time/distance offsets to delay values with dual table output
 - **Channel Inversions**: Show which channels have polarity inversion
-- **Professional Format**: Generates REW/StormAudio compatible filter files
+- **Professional Export**: Generate comprehensive channel settings files for audio processors
 
 ## 🚀 Getting Started
 
@@ -54,6 +55,8 @@ Or run locally:
 4. **Convert & Download**:
    - Click "Convert" to process the filters
    - Add manual filter to all channels or individual channels. These are added before filters from MSO content.
+   - **Export Channel Settings**: Download delay, gain, and inversion settings as formatted text
+   - Configure delay units (ms, meters, feet) and apply offsets if needed
    - Download individual files or all files at once
 
 ## 📊 Supported Filter Types
@@ -64,7 +67,8 @@ Or run locally:
 
 ### Channel Settings Extracted
 - **Gain Block**: Final gain values displayed separately
-- **Delay Block**: Final delay values displayed separately  
+- **Delay Block**: Final delay values displayed separately with unit conversion
+- **Delay Offset**: Optional offset application with dual table output (relative vs absolute)
 - **Polarity Inversion**: Channel inversions displayed separately
 
 ## 💾 Input Format
@@ -115,6 +119,43 @@ Filter 1: ON Bell Fc 52.9284 Hz Gain -2.56499 dB Q 11.0387
 Filter 2: ON All Pass Order 2 Fc 32.1576 Hz Gain 0 dB Q 0.500044
 ```
 
+### Channel Settings Export
+Comprehensive channel settings file with professional formatting:
+
+```
+MSO Channel Settings Export
+Generated: 2025-08-24 10:30:15
+============================================================
+
+DELAY SETTINGS
+----------------------------------------
+
+Offset applied: 5.00 ms / 1.715 m / 5.63 ft
+
+Relative Delays (MSO values without offset):
+Channel    Milliseconds    Meters       Feet        
+---------- --------------- ------------ ------------
+FL               12.45 ms     4.270 m    14.01 ft
+FR                8.73 ms     2.994 m     9.82 ft
+
+Absolute Delays (with offset applied):
+Channel    Milliseconds    Meters       Feet        
+---------- --------------- ------------ ------------
+FL               17.45 ms     5.985 m    19.64 ft
+FR               13.73 ms     4.709 m    15.45 ft
+
+GAIN SETTINGS
+Channel    Gain (dB)   
+---------- ------------
+FL             -2.34 dB
+FR             -1.89 dB
+
+CHANNEL INVERSIONS
+Channel    Status    
+---------- ----------
+FL         Inverted  
+```
+
 ### Output Files Structure
 
 #### Default Mode (Separate Files)
@@ -129,6 +170,12 @@ Filter 2: ON All Pass Order 2 Fc 32.1576 Hz Gain 0 dB Q 0.500044
 - `FR_filters.txt` - Shared + Front Right filters
 - Each channel file contains shared subwoofer filters followed by channel-specific filters
 
+#### Channel Settings Export
+- `channel_settings.txt` - Comprehensive delay, gain, and inversion settings
+- **Dual Delay Tables**: When offset is applied, shows both relative (MSO) and absolute (with offset) values
+- **Multi-Unit Display**: Delays shown in milliseconds, meters, and feet
+- **Professional Format**: Ready for import into audio processors
+
 ## ⚙️ Configuration Options
 
 | Option | Description | Default |
@@ -138,6 +185,8 @@ Filter 2: ON All Pass Order 2 Fc 32.1576 Hz Gain 0 dB Q 0.500044
 | Include Parametric EQ | Process Parametric EQ filters | ✓ |
 | Include All-Pass | Process All-Pass filters | ✓ |
 | Combine Shared | Merge shared filters with channels | ✗ |
+| Delay Unit | Display unit for delays (ms/m/ft) | Milliseconds |
+| Delay Offset | Optional offset applied to all delays | 0 |
 
 ## 🔧 Technical Details
 
@@ -150,6 +199,12 @@ Filter 2: ON All Pass Order 2 Fc 32.1576 Hz Gain 0 dB Q 0.500044
 ### Q Value Types
 - **RBJ Q**: Uses `Parameter "Q (RBJ)"` values from MSO output (StormAudio compatible)
 - **Classic Q**: Uses `"Classic" Q` values from MSO output
+
+### Delay Processing
+- **Unit Conversion**: Automatic conversion between milliseconds, meters, and feet
+- **Offset Application**: Optional offset can be applied to all delay values
+- **Dual Table Output**: When offset is used, generates both relative and absolute delay tables
+- **Speed of Sound**: Calculations use 343 m/s for distance conversions
 
 ### Two-Stage Parsing
 1. **Stage 1**: Extract channel blocks using regex pattern matching
@@ -228,7 +283,8 @@ Please [open an issue](https://github.com/mikkopa/mso-rew-converter-ui/issues/ne
 ## 📈 Version History
 
 - **v1.0**: Initial Blazor WebAssembly release
-- **v1.0.1**: Added option to add manual filters to result files. Added option to show delay in milliseconds, meters or feets and to add an offset to delay values.
+- **v1.0.1**: Added option to add manual filters to result files. Added option to show delay in milliseconds, meters or feet and to add an offset to delay values.
+- **v1.0.2**: Enhanced channel settings export with dual delay tables, comprehensive offset support, and professional formatting for audio processor integration.
 
 ---
 

@@ -1,0 +1,55 @@
+MSO Channel Settings Export
+Generated: 2025-08-24 10:30:15
+============================================================
+
+DELAY SETTINGS
+----------------------------------------
+
+Offset applied: 5.00 ms / 1.715 m / 5.63 ft
+
+Relative Delays (MSO values without offset):
+Channel    Milliseconds    Meters       Feet        
+---------- --------------- ------------ ------------
+FL               12.45 ms     4.270 m    14.01 ft
+FR                8.73 ms     2.994 m     9.82 ft
+RL               15.20 ms     5.214 m    17.11 ft
+RR               11.80 ms     4.047 m    13.28 ft
+SUB1              0.00 ms     0.000 m     0.00 ft
+SUB2              2.30 ms     0.789 m     2.59 ft
+
+Absolute Delays (with offset applied):
+Channel    Milliseconds    Meters       Feet        
+---------- --------------- ------------ ------------
+FL               17.45 ms     5.985 m    19.64 ft
+FR               13.73 ms     4.709 m    15.45 ft
+RL               20.20 ms     6.929 m    22.74 ft
+RR               16.80 ms     5.762 m    18.91 ft
+SUB1              5.00 ms     1.715 m     5.63 ft
+SUB2              7.30 ms     2.504 m     8.22 ft
+
+GAIN SETTINGS
+------------------------------
+
+Channel    Gain (dB)   
+---------- ------------
+FL             -2.34 dB
+FR             -1.89 dB
+RL             -3.12 dB
+RR             -2.78 dB
+SUB1           +1.50 dB
+SUB2           +0.85 dB
+
+CHANNEL INVERSIONS
+------------------------------
+
+Channel    Status    
+---------- ----------
+FL         Inverted  
+
+============================================================
+Notes:
+- Delay conversion assumes speed of sound = 343 m/s
+- Distance delays represent acoustic path difference
+- Relative delays show MSO values without offset
+- Absolute delays include the specified offset
+- Apply these settings in your audio processor

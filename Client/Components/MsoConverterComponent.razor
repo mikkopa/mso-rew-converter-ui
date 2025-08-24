@@ -90,6 +90,13 @@
                                 Combine Shared Filters
                             </label>
                         </div>
+                        <div class="form-check">
+                            <input @bind="options.SaveChannelSettings" class="form-check-input" type="checkbox" />
+                            <label class="form-check-label">
+                                Export Channel Settings File
+                            </label>
+                            <div class="form-text">Generate a separate file with delays (ms/m/ft), gains, and inversions</div>
+                        </div>
                     </div>
 
                     <div class="mb-3">
@@ -210,7 +217,7 @@
                                 </div>
                                 <div class="card-body">
                                     <div class="list-group">
-                                        @foreach (var file in conversionResult.GetDownloadFiles())
+                                        @foreach (var file in conversionResult.GetDownloadFiles(options.SaveChannelSettings, options.DelayOffset, options.DelayDisplayUnit))
                                         {
                                             <div class="list-group-item d-flex justify-content-between align-items-center">
                                                 <span>@file.FileName</span>
@@ -550,7 +557,7 @@
     {
         if (conversionResult == null) return;
 
-        var files = conversionResult.GetDownloadFiles();
+        var files = conversionResult.GetDownloadFiles(options.SaveChannelSettings, options.DelayOffset, options.DelayDisplayUnit);
         foreach (var file in files)
         {
             await DownloadFile(file);

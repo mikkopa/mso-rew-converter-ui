@@ -20,6 +20,11 @@ namespace PeqConverter.Client.Services
         public bool IncludeParametricEQ { get; set; } = true;
 
         public bool IncludeAllPass { get; set; } = true;
+
+        /// <summary>
+        /// Whether to generate a channel settings file with delays, gains, and inversions
+        /// </summary>
+        public bool SaveChannelSettings { get; set; } = false;
         
     /// <summary>
     /// Unit to display delays in the UI
@@ -293,6 +298,198 @@ namespace PeqConverter.Client.Services
             }
 
             return files;
+        }
+
+        /// <summary>
+        /// Get all files ready for download including channel settings if enabled
+        /// </summary>
+        public static List<FileDownloadInfo> GetDownloadFiles(this ConversionResult result, bool includeChannelSettings)
+        {
+            return GetDownloadFiles(result, includeChannelSettings, 0.0, DelayUnit.Milliseconds);
+        }
+
+        /// <summary>
+        /// Get all files ready for download including channel settings if enabled with offset support
+        /// </summary>
+        public static List<FileDownloadInfo> GetDownloadFiles(this ConversionResult result, bool includeChannelSettings, double delayOffset, DelayUnit offsetUnit)
+        {
+            var files = GetDownloadFiles(result);
+
+            if (includeChannelSettings && (result.DelaySettings.Any() || result.GainSettings.Any() || result.Inversions.HasInversions))
+            {
+                files.Add(new FileDownloadInfo
+                {
+                    FileName = "channel_settings.txt",
+                    Content = GenerateChannelSettingsFile(result, delayOffset, offsetUnit),
+                    MimeType = "text/plain"
+                });
+            }
+
+            return files;
+        }
+
+        /// <summary>
+        /// Generate channel settings file content with delays in all units, gains, and inversions
+        /// </summary>
+        public static string GenerateChannelSettingsFile(ConversionResult result)
+        {
+            return GenerateChannelSettingsFile(result, 0.0, DelayUnit.Milliseconds);
+        }
+
+        /// <summary>
+        /// Generate channel settings file content with delays in all units, gains, and inversions
+        /// </summary>
+        public static string GenerateChannelSettingsFile(ConversionResult result, double delayOffset, DelayUnit offsetUnit)
+        {
+            var content = new System.Text.StringBuilder();
+            const double speedOfSound_m_per_s = 343.0;
+
+            content.AppendLine("MSO Channel Settings Export");
+            content.AppendLine($"Generated: {DateTime.Now:yyyy-MM-dd HH:mm:ss}");
+            content.AppendLine("=" + new string('=', 60));
+            content.AppendLine();
+
+            // DELAY SETTINGS SECTION
+            if (result.DelaySettings.Any())
+            {
+                bool hasOffset = Math.Abs(delayOffset) > 0.001;
+
+                // Convert offset to all units for display
+                double offsetMs, offsetM, offsetFt;
+                switch (offsetUnit)
+                {
+                    case DelayUnit.Milliseconds:
+                        offsetMs = delayOffset;
+                        offsetM = (delayOffset / 1000.0) * speedOfSound_m_per_s;
+                        offsetFt = offsetM * 3.28084;
+                        break;
+                    case DelayUnit.Meters:
+                        offsetM = delayOffset;
+                        offsetMs = (delayOffset / speedOfSound_m_per_s) * 1000.0;
+                        offsetFt = delayOffset * 3.28084;
+                        break;
+                    case DelayUnit.Feet:
+                        offsetFt = delayOffset;
+                        offsetM = delayOffset / 3.28084;
+                        offsetMs = (offsetM / speedOfSound_m_per_s) * 1000.0;
+                        break;
+                    default:
+                        offsetMs = offsetM = offsetFt = 0.0;
+                        break;
+                }
+
+                content.AppendLine("DELAY SETTINGS");
+                content.AppendLine("-" + new string('-', 40));
+                content.AppendLine();
+
+                if (hasOffset)
+                {
+                    content.AppendLine($"Offset applied: {offsetMs:F2} ms / {offsetM:F3} m / {offsetFt:F2} ft");
+                    content.AppendLine();
+
+                    // First table: Relative delays (without offset)
+                    content.AppendLine("Relative Delays (MSO values without offset):");
+                    content.AppendLine($"{"Channel",-10} {"Milliseconds",-15} {"Meters",-12} {"Feet",-12}");
+                    content.AppendLine($"{new string('-', 10)} {new string('-', 15)} {new string('-', 12)} {new string('-', 12)}");
+
+                    foreach (var delay in result.DelaySettings.OrderBy(d => d.ChannelName))
+                    {
+                        var delayMs = delay.DelayValue;
+                        var delayMeters = (delayMs / 1000.0) * speedOfSound_m_per_s;
+                        var delayFeet = delayMeters * 3.28084;
+
+                        content.AppendLine($"{delay.ChannelName,-10} {delayMs,12:F2} ms {delayMeters,9:F3} m {delayFeet,9:F2} ft");
+                    }
+                    content.AppendLine();
+
+                    // Second table: Absolute delays (with offset applied)
+                    content.AppendLine("Absolute Delays (with offset applied):");
+                    content.AppendLine($"{"Channel",-10} {"Milliseconds",-15} {"Meters",-12} {"Feet",-12}");
+                    content.AppendLine($"{new string('-', 10)} {new string('-', 15)} {new string('-', 12)} {new string('-', 12)}");
+
+                    foreach (var delay in result.DelaySettings.OrderBy(d => d.ChannelName))
+                    {
+                        var delayMs = delay.DelayValue;
+                        var delayMeters = (delayMs / 1000.0) * speedOfSound_m_per_s;
+                        var delayFeet = delayMeters * 3.28084;
+
+                        // Apply offset
+                        var absoluteMs = delayMs + offsetMs;
+                        var absoluteM = delayMeters + offsetM;
+                        var absoluteFt = delayFeet + offsetFt;
+
+                        content.AppendLine($"{delay.ChannelName,-10} {absoluteMs,12:F2} ms {absoluteM,9:F3} m {absoluteFt,9:F2} ft");
+                    }
+                }
+                else
+                {
+                    // Single table: No offset applied
+                    content.AppendLine($"{"Channel",-10} {"Milliseconds",-15} {"Meters",-12} {"Feet",-12}");
+                    content.AppendLine($"{new string('-', 10)} {new string('-', 15)} {new string('-', 12)} {new string('-', 12)}");
+
+                    foreach (var delay in result.DelaySettings.OrderBy(d => d.ChannelName))
+                    {
+                        var delayMs = delay.DelayValue;
+                        var delayMeters = (delayMs / 1000.0) * speedOfSound_m_per_s;
+                        var delayFeet = delayMeters * 3.28084;
+
+                        content.AppendLine($"{delay.ChannelName,-10} {delayMs,12:F2} ms {delayMeters,9:F3} m {delayFeet,9:F2} ft");
+                    }
+                }
+                content.AppendLine();
+            }
+
+            // GAIN SETTINGS SECTION
+            if (result.GainSettings.Any())
+            {
+                content.AppendLine("GAIN SETTINGS");
+                content.AppendLine("-" + new string('-', 30));
+                content.AppendLine();
+
+                // Table header
+                content.AppendLine($"{"Channel",-10} {"Gain (dB)",-12}");
+                content.AppendLine($"{new string('-', 10)} {new string('-', 12)}");
+
+                foreach (var gain in result.GainSettings.OrderBy(g => g.ChannelName))
+                {
+                    content.AppendLine($"{gain.ChannelName,-10} {gain.GainValue,9:F2} dB");
+                }
+                content.AppendLine();
+            }
+
+            // INVERSIONS SECTION
+            content.AppendLine("CHANNEL INVERSIONS");
+            content.AppendLine("-" + new string('-', 30));
+            content.AppendLine();
+
+            if (result.Inversions.HasInversions)
+            {
+                content.AppendLine($"{"Channel",-10} {"Status",-10}");
+                content.AppendLine($"{new string('-', 10)} {new string('-', 10)}");
+
+                foreach (var channel in result.Inversions.InvertedChannels.OrderBy(c => c))
+                {
+                    content.AppendLine($"{channel,-10} {"Inverted",-10}");
+                }
+            }
+            else
+            {
+                content.AppendLine("No channel inversions detected.");
+            }
+
+            content.AppendLine();
+            content.AppendLine("=" + new string('=', 60));
+            content.AppendLine("Notes:");
+            content.AppendLine("- Delay conversion assumes speed of sound = 343 m/s");
+            content.AppendLine("- Distance delays represent acoustic path difference");
+            if (Math.Abs(delayOffset) > 0.001)
+            {
+                content.AppendLine("- Relative delays show MSO values without offset");
+                content.AppendLine("- Absolute delays include the specified offset");
+            }
+            content.AppendLine("- Apply these settings in your audio processor");
+
+            return content.ToString();
         }
 
         /// <summary>
